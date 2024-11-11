@@ -28,10 +28,10 @@ class AuthStatus(models.TextChoices):
 
 class UserModel(AbstractUser, BaseModel):
     email = models.EmailField(unique=True, null=True, blank=True)
-    phone = models.CharField(unique=True, null=True, blank=True)
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
 
     auth_status = models.CharField(max_length=50, choices=AuthStatus.choices, default=AuthStatus.NEW)
-    auth_type = models.CharField(max_length=50, choices=AuthType.choices, default=AuthType)
+    auth_type = models.CharField(max_length=50, choices=AuthType.choices)
     user_role = models.CharField(max_length=50, choices=UserRole.choices, default=UserRole.ORDINARY)
 
     class Meta:
@@ -77,9 +77,10 @@ class UserModel(AbstractUser, BaseModel):
 
 class UserConfirmModel(models.Model):
     code = models.CharField(max_length=4)
+    is_confirmed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    user = models.ForeignKey(UserModel, on_delete=models.CASCADE, related_name='verify_code')
+    user = models.ForeignKey(UserModel, on_delete=models.CASCADE, related_name='verify_codes')
 
     def __str__(self):
         return f"{self.user.__str__()} - {self.code}"

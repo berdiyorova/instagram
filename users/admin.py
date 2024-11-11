@@ -1,3 +1,6 @@
 from django.contrib import admin
 
-# Register your models here.
+from users.models import UserModel, UserConfirmModel
+
+admin.site.register(UserModel)
+admin.site.register(UserConfirmModel)

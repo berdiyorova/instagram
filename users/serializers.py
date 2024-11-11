@@ -1,8 +1,10 @@
-from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from rest_framework import serializers, status
 from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 
 from common.utility import check_email_or_phone
-from users.models import UserModel, AuthType
+from users.models import UserModel, AuthType, AuthStatus
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -51,3 +53,45 @@ class RegisterSerializer(serializers.ModelSerializer):
             }
             raise ValidationError(data)
         return value
+
+
+class ChangeUserInfoSerializer(serializers.ModelSerializer):
+    confirm_password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = UserModel
+        fields = ['first_name', 'last_name', 'username', 'password', 'confirm_password']
+
+    def validate(self, attrs):
+        password = attrs.get('password')
+        confirm_password = attrs.get('confirm_password')
+
+        if password != confirm_password:
+            raise serializers.ValidationError("Passwords do not match")
+
+        try:
+            validate_password(password=password)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        instance.first_name = self.validated_data['first_name']
+        instance.last_name = self.validated_data['last_name']
+        instance.username = self.validated_data['username']
+        instance.set_password(self.validated_data['password'])
+        instance.auth_status = AuthStatus.DONE
+
+        instance.save()
+        return instance
+
+    def to_representation(self, instance):
+        return Response(
+                {
+                    'success': True,
+                    'message': 'User updated successfully',
+                    'auth_status': instance.auth_status
+                }, status=status.HTTP_202_ACCEPTED
+            )

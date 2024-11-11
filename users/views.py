@@ -4,14 +4,13 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.utility import check_email_or_phone, send_verify_code_to_email, send_verify_code_to_phone
 from users.models import UserModel, AuthStatus
-from users.serializers import RegisterSerializer
-
+from users.serializers import RegisterSerializer, ChangeUserInfoSerializer
 
 PHONE_EXPIRE = 2
 EMAIL_EXPIRE = 5
@@ -114,3 +113,12 @@ class ResendVerifyView(APIView):
                 "message": "Your code is still usable. Wait a moment."
             }
             raise ValidationError(data)
+
+
+class ChangeUserInformationView(generics.UpdateAPIView):
+    permission_classes = [IsAuthenticated, ]
+    serializer_class = ChangeUserInfoSerializer
+    http_method_names = ['patch', 'put']
+
+    def get_object(self):
+        return self.request.user

@@ -45,7 +45,8 @@ class UserModel(AbstractUser, BaseModel):
 
     @property
     def full_name(self):
-        return f"{self.first_name} {self.last_name}"
+        # return f"{self.first_name} {self.last_name}"
+        return self.get_full_name()
 
     def create_verify_code(self):
         code = "".join(str(random.randint(0, 100) // 10) for _ in range(4))

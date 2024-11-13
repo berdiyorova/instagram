@@ -7,10 +7,12 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from common.utility import check_email_or_phone, send_verify_code_to_email, send_verify_code_to_phone
-from users.models import UserModel, AuthStatus
-from users.serializers import RegisterSerializer, ChangeUserInfoSerializer, LoginSerializer
+from users.models import UserModel, AuthStatus, AuthType, FollowingModel
+from users.serializers import RegisterSerializer, ChangeUserInfoSerializer, LoginSerializer, LogoutSerializer, \
+    FollowingSerializer
 
 PHONE_EXPIRE = 2
 EMAIL_EXPIRE = 5
@@ -23,37 +25,28 @@ class RegisterView(generics.CreateAPIView):
 
 
 class VerifyView(APIView):
+    permission_classes = [IsAuthenticated,]
+
     def post(self, *args, **kwargs):
-        user_input = self.request.data.get('email_or_phone')
+        user = self.request.user
         code = self.request.data.get('code')
-        input_type = check_email_or_phone(user_input)
 
-        user = UserModel.objects.filter(Q(email=user_input) | Q(phone=user_input)).first()
+        self.check_verify(user, code)
 
-        if user:
-            self.check_verify(user, code, input_type)
-
-            return Response(
-                data={
-                    'success': True,
-                    'auth_status': user.auth_status,
-                    'message': f"Your {input_type} has been verified."
-                }, status=status.HTTP_200_OK
-            )
-
-        else:
-            return Response(
-                data={
-                    'success': False,
-                    'message': 'User not fount.'
-                }, status=status.HTTP_400_BAD_REQUEST
-            )
+        return Response(
+            data={
+                'success': True,
+                'auth_status': user.auth_status,
+                'access': user.token()['access_token'],
+                'refresh': user.token()['refresh_token']
+            }
+        )
 
     @staticmethod
-    def check_verify(user, code, input_type):
-        if input_type == 'email':
+    def check_verify(user, code):
+        if user.auth_type == AuthType.VIA_EMAIL:
             expiration_time = EMAIL_EXPIRE
-        else:
+        elif user.auth_type == AuthType.VIA_PHONE:
             expiration_time = PHONE_EXPIRE
 
         verifies = user.verify_codes.filter(
@@ -69,25 +62,25 @@ class VerifyView(APIView):
             raise ValidationError(data)
         else:
             verifies.update(is_confirmed=True)
-            user.auth_status = AuthStatus.CODE_VERIFIED
+            if user.auth_status == AuthStatus.NEW:
+                user.auth_status = AuthStatus.CODE_VERIFIED
             user.save()
 
         return True
 
 
 class ResendVerifyView(APIView):
-    def post(self, *args, **kwargs):
-        user_input = self.request.data.get('email_or_phone')
-        input_type = check_email_or_phone(user_input)
-        user = UserModel.objects.filter(Q(email=user_input) | Q(phone=user_input)).first()
+    permission_classes = [IsAuthenticated, ]
 
-        self.check_verification(user=user, input_type=input_type)
+    def get(self, *args, **kwargs):
+        user = self.request.user
+
+        self.check_verification(user=user)
         code = user.create_verify_code()
 
-        if input_type == 'email':
+        if user.auth_type == AuthType.VIA_EMAIL:
             send_verify_code_to_email(user.email, code)
-
-        elif input_type == 'phone':
+        elif user.auth_type == AuthType.VIA_PHONE:
             send_verify_code_to_phone(user.phone, code)
 
         return Response(
@@ -98,10 +91,10 @@ class ResendVerifyView(APIView):
         )
 
     @staticmethod
-    def check_verification(user, input_type):
-        if input_type == 'email':
+    def check_verification(user):
+        if user.auth_type == AuthType.VIA_EMAIL:
             expiration_time = EMAIL_EXPIRE
-        else:
+        elif user.auth_type == AuthType.VIA_PHONE:
             expiration_time = PHONE_EXPIRE
 
         verifies = user.verify_codes.filter(
@@ -115,9 +108,6 @@ class ResendVerifyView(APIView):
             raise ValidationError(data)
 
 
-class LoginView(APIView):
-    serializer_class = LoginSerializer
-
 class ChangeUserInformationView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, ]
     serializer_class = ChangeUserInfoSerializer
@@ -126,11 +116,59 @@ class ChangeUserInformationView(generics.UpdateAPIView):
     def get_object(self):
         return self.request.user
 
-    def update(self, request, *args, **kwargs):
-        user = self.get_object()
-        serializer = self.serializer_class(user, data=request.data)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class LoginView(APIView):
+    serializer_class = LoginSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(data=serializer.validated_data, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated,]
+    serializer_class = LogoutSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh = serializer.validated_data['refresh']
+
+        token = RefreshToken(refresh)
+        token.blacklist()
+
+        return Response({
+                'success': True,
+                'message': 'You are logged out'
+            }, status=status.HTTP_205_RESET_CONTENT
+        )
+
+
+class FollowingView(APIView):
+    serializer_class = FollowingSerializer
+    permission_classes = [IsAuthenticated,]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = self.request.user
+        to_user = serializer.validated_data['to_user']
+
+        if user == to_user:
+            raise ValidationError("You cannot follow yourself")
+
+        data = {"success": True}
+        following = FollowingModel.objects.filter(user=user, to_user=to_user)
+
+        if following.exists():
+            following.delete()
+            data["message"] = f"You have unfollowed to {to_user} successfully."
+
+            return Response(data=data, status=status.HTTP_204_NO_CONTENT)
+
+        FollowingModel.objects.create(user=user, to_user=to_user)
+        data["message"] = f"You have followed to {to_user} successfully."
+
+        return Response(data=data, status=status.HTTP_201_CREATED)

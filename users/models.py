@@ -31,6 +31,7 @@ class UserModel(AbstractUser, BaseModel):
     id = models.UUIDField(unique=True, primary_key=True, editable=False, default=uuid.uuid4)
     email = models.EmailField(unique=True, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)
 
     auth_status = models.CharField(max_length=50, choices=AuthStatus.choices, default=AuthStatus.NEW)
     auth_type = models.CharField(max_length=50, choices=AuthType.choices)

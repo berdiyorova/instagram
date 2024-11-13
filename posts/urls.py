@@ -1,9 +1,13 @@
 from django.urls import path
+from rest_framework.routers import DefaultRouter
 
 from posts import views
 
+router = DefaultRouter()
+router.register(prefix=r'', viewset=views.PostViewSet)
+router.register(prefix=r'comments', viewset=views.CommentViewSet)
+
 urlpatterns = [
-    path('list/', views.PostListView.as_view()),
-    path('create/', views.PostCreateView.as_view()),
-    path('<uuid:pk>/', views.PostDetailView.as_view()),
-]
+    path('like/', views.PostLikeView.as_view()),
+    path('comments/like/', views.CommentLikeView.as_view()),
+] + router.urls

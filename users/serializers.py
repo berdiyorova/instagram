@@ -1,9 +1,10 @@
+from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers, status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 
-from common.utility import check_email_or_phone
+from common.utility import check_email_or_phone, check_user_type
 from users.models import UserModel, AuthType, AuthStatus
 
 
@@ -55,6 +56,36 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
 
+class LoginSerializer(serializers.Serializer):
+    user_input = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        user_input = attrs.get('user_input')
+        password = attrs.get('password')
+        user_type = check_user_type(user_input)
+        user = None
+
+        if user_type == 'email':
+            user = UserModel.objects.get(email=user_input)
+        elif user_type == 'phone':
+            user = UserModel.objects.get(phone=user_input)
+        elif user_type == 'username':
+            user = UserModel.objects.get(username=user_input)
+
+        if user is not None and user.auth_status == AuthStatus.NEW:
+            raise PermissionDenied("You are not fully registered.")
+
+        authenticated_user = authenticate(username=user.username, password=password)
+        if not authenticated_user:
+            raise serializers.ValidationError("Email/Username/Phone_number or password is not valid")
+
+        attrs = user.token()
+        attrs['auth_status'] = user.auth_status
+        attrs['full_name'] = user.full_name
+        return attrs
+
+
 class ChangeUserInfoSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
@@ -78,9 +109,11 @@ class ChangeUserInfoSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
-        instance.first_name = self.validated_data['first_name']
-        instance.last_name = self.validated_data['last_name']
-        instance.username = self.validated_data['username']
+        validated_data.pop('confirm_password')
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
         instance.set_password(self.validated_data['password'])
         instance.auth_status = AuthStatus.DONE
 
@@ -88,10 +121,8 @@ class ChangeUserInfoSerializer(serializers.ModelSerializer):
         return instance
 
     def to_representation(self, instance):
-        return Response(
-                {
-                    'success': True,
-                    'message': 'User updated successfully',
-                    'auth_status': instance.auth_status
-                }, status=status.HTTP_202_ACCEPTED
-            )
+        representation = super().to_representation(instance)
+        representation['success'] = True
+        representation['message'] = 'User updated successfully'
+        representation['auth_status'] = instance.auth_status
+        return representation

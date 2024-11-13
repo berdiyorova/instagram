@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from common.utility import check_email_or_phone, send_verify_code_to_email, send_verify_code_to_phone
 from users.models import UserModel, AuthStatus
-from users.serializers import RegisterSerializer, ChangeUserInfoSerializer
+from users.serializers import RegisterSerializer, ChangeUserInfoSerializer, LoginSerializer
 
 PHONE_EXPIRE = 2
 EMAIL_EXPIRE = 5
@@ -115,6 +115,9 @@ class ResendVerifyView(APIView):
             raise ValidationError(data)
 
 
+class LoginView(APIView):
+    serializer_class = LoginSerializer
+
 class ChangeUserInformationView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, ]
     serializer_class = ChangeUserInfoSerializer
@@ -122,3 +125,12 @@ class ChangeUserInformationView(generics.UpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = self.serializer_class(user, data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

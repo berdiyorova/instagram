@@ -1,4 +1,5 @@
 import random
+import uuid
 from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
@@ -21,12 +22,13 @@ class AuthType(models.TextChoices):
 
 class AuthStatus(models.TextChoices):
     NEW = 'NEW', 'new'
-    CODE_VERIFIED = 'CODE_VERIFIED', 'new'
+    CODE_VERIFIED = 'CODE_VERIFIED', 'code_verified'
     DONE = 'DONE', 'done'
     PHOTO_STEP = 'PHOTO_STEP', 'photo_step'
 
 
 class UserModel(AbstractUser, BaseModel):
+    id = models.UUIDField(unique=True, primary_key=True, editable=False, default=uuid.uuid4)
     email = models.EmailField(unique=True, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
 
@@ -68,8 +70,19 @@ class UserModel(AbstractUser, BaseModel):
                 temp_username = f"{temp_username}{random.randint(0, 9)}"
             self.username = temp_username
 
+    def check_pass(self):
+        if not self.password:
+            temp_password = f"password-{str(self.id).split('-')[-1]}"
+            self.password = temp_password
+
+    def hashing_password(self):
+        if not self.password.startswith('pbkdf2_sha256'):
+            self.set_password(self.password)
+
     def save(self, *args, **kwargs):
         self.check_username()
+        self.check_pass()
+        self.hashing_password()
         super(UserModel, self).save(*args, **kwargs)
 
 
@@ -89,3 +102,17 @@ class UserConfirmModel(models.Model):
         verbose_name = 'Verification code'
         verbose_name_plural = 'Verification codes'
         unique_together = ('user', 'code')
+
+
+
+class FollowingModel(BaseModel):
+    user = models.ForeignKey(UserModel, on_delete=models.CASCADE, related_name='following')
+    to_user = models.ForeignKey(UserModel, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.user} followed {self.to_user}"
+
+    class Meta:
+        verbose_name = 'Follower'
+        verbose_name_plural = 'Followers'
+        unique_together = ['user', 'to_user']

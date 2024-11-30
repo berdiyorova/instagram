@@ -1,0 +1,45 @@
+# Exclude Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Exclude virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# Exclude local configuration files
+*.local
+*.sqlite3
+
+# Exclude log files
+*.log
+
+# Exclude test and coverage files
+*.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Exclude IDE and editor settings
+.idea/
+.vscode/
+*.swp
+
+# Exclude Docker-related files
+Dockerfile*
+docker-compose*.yml
+
+# Exclude any other system files
+.DS_Store
+Thumbs.db
+.git
+.gitignore

@@ -87,11 +87,11 @@ WSGI_APPLICATION = 'Config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': "n50_instagram",
-        'HOST': "db",
-        'PORT': "5432",
-        'USER': "postgres",
-        'PASSWORD': "Rrshv1719",
+        'NAME': config("DB_NAME"),
+        'HOST': config("DB_HOST"),
+        'PORT': config("DB_PORT"),
+        'USER': config("DB_USER"),
+        'PASSWORD': config("DB_PASS"),
     }
 }
 
